@@ -1,0 +1,26 @@
+{
+  "name": "freeseek",
+  "version": "1.0.0",
+  "description": "DeepSeek 网页版反向代理桌面工具",
+  "main": "dist/main/index.js",
+  "type": "commonjs",
+  "scripts": {
+    "build": "tsc && node -e \"require('fs').cpSync('src/renderer','dist/renderer',{recursive:true})\"",
+    "start": "npm run build && electron dist/main/index.js",
+    "dev": "npm run build && electron dist/main/index.js",
+    "auth": "tsc && node dist/main/auth.js",
+    "pack": "npm run build && electron-builder --config electron-builder.json"
+  },
+  "dependencies": {
+    "@noble/hashes": "^2.0.1",
+    "express": "^4.21.0",
+    "playwright-core": "^1.49.0"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.0",
+    "@types/node": "^22.0.0",
+    "electron": "^33.0.0",
+    "electron-builder": "^25.1.0",
+    "typescript": "^5.7.0"
+  }
+}
