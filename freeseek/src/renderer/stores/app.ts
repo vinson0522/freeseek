@@ -31,6 +31,12 @@ export const useAppStore = defineStore("app", () => {
   const claudeHasOrganizationId = ref(false);
   const claudeCapturedAt = ref<string | null>(null);
 
+  // --- Qwen Credentials ---
+  const hasQwenCredentials = ref(false);
+  const qwenTokenPrefix = ref("");
+  const qwenHasBxUa = ref(false);
+  const qwenCapturedAt = ref<string | null>(null);
+
   // --- Logs ---
   const logs = ref<LogEntry[]>([]);
   const logFilter = ref("all");
@@ -68,6 +74,7 @@ export const useAppStore = defineStore("app", () => {
 
       await refreshCredentials();
       await refreshClaudeCredentials();
+      await refreshQwenCredentials();
     } catch (e) {
       console.error(e);
     }
@@ -115,6 +122,23 @@ export const useAppStore = defineStore("app", () => {
     } catch { /* ignore */ }
   }
 
+  async function refreshQwenCredentials() {
+    try {
+      const c = await bridge.getQwenCredentials();
+      if (c) {
+        hasQwenCredentials.value = true;
+        qwenTokenPrefix.value = c.tokenPrefix || "";
+        qwenHasBxUa.value = c.hasBxUa || false;
+        qwenCapturedAt.value = c.capturedAt;
+      } else {
+        hasQwenCredentials.value = false;
+        qwenTokenPrefix.value = "";
+        qwenHasBxUa.value = false;
+        qwenCapturedAt.value = null;
+      }
+    } catch { /* ignore */ }
+  }
+
   async function toggleServer() {
     if (serverRunning.value) {
       await bridge.stopServer();
@@ -138,10 +162,11 @@ export const useAppStore = defineStore("app", () => {
     hasCredentials, cookieCount, hasSessionId, bearerLength, capturedAt,
     expiryStatus, expiryDetail,
     hasClaudeCredentials, claudeSessionKeyPrefix, claudeHasOrganizationId, claudeCapturedAt,
+    hasQwenCredentials, qwenTokenPrefix, qwenHasBxUa, qwenCapturedAt,
     logs, logFilter, filteredLogs,
     toasts, showToast,
     activePage,
-    refreshStatus, refreshCredentials, refreshClaudeCredentials, toggleServer, addLog, clearLogs,
+    refreshStatus, refreshCredentials, refreshClaudeCredentials, refreshQwenCredentials, toggleServer, addLog, clearLogs,
   };
 });
 

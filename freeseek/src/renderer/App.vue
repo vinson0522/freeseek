@@ -12,12 +12,14 @@ import PageDebug from "./pages/PageDebug.vue";
 import PageChat from "./pages/PageChat.vue";
 import PageLogs from "./pages/PageLogs.vue";
 import PageSettings from "./pages/PageSettings.vue";
+import PageOpenClaw from "./pages/PageOpenClaw.vue";
 
 const store = useAppStore();
 
 const pages: Record<string, any> = {
   dashboard: PageDashboard, auth: PageAuth, api: PageApi,
-  debug: PageDebug, test: PageChat, logs: PageLogs, settings: PageSettings,
+  debug: PageDebug, test: PageChat, logs: PageLogs,
+  openclaw: PageOpenClaw, settings: PageSettings,
 };
 
 let timer: ReturnType<typeof setInterval>;
@@ -40,8 +42,8 @@ onUnmounted(() => {
 });
 
 function onKeydown(e: KeyboardEvent) {
-  const pageKeys = ["dashboard", "auth", "api", "debug", "test", "logs", "settings"];
-  if (e.ctrlKey && e.key >= "1" && e.key <= "7") {
+  const pageKeys = ["dashboard", "auth", "api", "debug", "test", "logs", "openclaw", "settings"];
+  if (e.ctrlKey && e.key >= "1" && e.key <= "8") {
     e.preventDefault();
     store.activePage = pageKeys[+e.key - 1];
   }

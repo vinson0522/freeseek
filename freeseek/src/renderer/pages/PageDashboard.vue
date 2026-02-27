@@ -126,6 +126,21 @@ function copyCode(el: Event) {
             <td>捕获时间</td><td>—</td>
             <td style="color:var(--text-tertiary)">{{ store.claudeCapturedAt ? new Date(store.claudeCapturedAt).toLocaleString('zh-CN') : '—' }}</td>
           </tr>
+          <tr>
+            <td rowspan="3">通义千问</td>
+            <td>Token</td>
+            <td><span :class="['ant-badge-dot', store.hasQwenCredentials ? 'success' : 'error']" />{{ store.hasQwenCredentials ? '有效' : '未设置' }}</td>
+            <td style="color:var(--text-tertiary)">{{ store.hasQwenCredentials ? store.qwenTokenPrefix : '—' }}</td>
+          </tr>
+          <tr>
+            <td>bx-ua 风控</td>
+            <td><span :class="['ant-badge-dot', store.qwenHasBxUa ? 'success' : 'warning']" />{{ store.qwenHasBxUa ? '已设置' : '未设置' }}</td>
+            <td style="color:var(--text-tertiary)">{{ store.qwenHasBxUa ? '已配置' : '可选' }}</td>
+          </tr>
+          <tr>
+            <td>捕获时间</td><td>—</td>
+            <td style="color:var(--text-tertiary)">{{ store.qwenCapturedAt ? new Date(store.qwenCapturedAt).toLocaleString('zh-CN') : '—' }}</td>
+          </tr>
         </table>
       </div>
     </div>
@@ -144,6 +159,11 @@ function copyCode(el: Event) {
           <tr><td><span class="ant-code">claude-opus-4-6</span></td><td>Claude Opus 4</td><td>Claude</td><td><span class="ant-tag ant-tag-processing">200K 上下文</span></td></tr>
           <tr><td><span class="ant-code">claude-haiku-4-6</span></td><td>Claude Haiku 4</td><td>Claude</td><td><span class="ant-tag ant-tag-processing">200K 上下文</span></td></tr>
           <tr><td><span class="ant-code">claude-3-5-sonnet</span></td><td>Claude 3.5 Sonnet</td><td>Claude</td><td><span class="ant-tag ant-tag-processing">别名</span></td></tr>
+          <tr><td><span class="ant-code">qwen3.5-plus</span></td><td>Qwen 3.5 Plus</td><td>通义千问</td><td><span class="ant-tag ant-tag-success">深度思考</span></td></tr>
+          <tr><td><span class="ant-code">qwen-max</span></td><td>Qwen Max</td><td>通义千问</td><td><span class="ant-tag ant-tag-success">深度思考</span></td></tr>
+          <tr><td><span class="ant-code">qwen-plus</span></td><td>Qwen Plus</td><td>通义千问</td><td style="color:var(--text-tertiary)">—</td></tr>
+          <tr><td><span class="ant-code">qwen-turbo</span></td><td>Qwen Turbo</td><td>通义千问</td><td style="color:var(--text-tertiary)">—</td></tr>
+          <tr><td><span class="ant-code">qwq-plus</span></td><td>QwQ Plus</td><td>通义千问</td><td><span class="ant-tag ant-tag-success">深度思考</span></td></tr>
         </table>
       </div>
     </div>

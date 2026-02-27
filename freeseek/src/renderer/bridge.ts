@@ -113,6 +113,28 @@ export const bridge = {
     return apiPost("/api/claude/saveManual", creds);
   },
 
+  // 通义千问凭证
+  startQwenAuth: async () => {
+    if (isElectron) return (window as any).freeseek.startQwenAuth();
+    return apiPost("/api/qwen/start");
+  },
+  getQwenCredentials: async () => {
+    if (isElectron) return (window as any).freeseek.getQwenCredentials();
+    return apiGet("/api/qwen/get");
+  },
+  clearQwenCredentials: async () => {
+    if (isElectron) return (window as any).freeseek.clearQwenCredentials();
+    return apiPost("/api/qwen/clear");
+  },
+  checkQwenExpiry: async () => {
+    if (isElectron) return (window as any).freeseek.checkQwenExpiry();
+    return apiPost("/api/qwen/checkExpiry");
+  },
+  saveQwenManualCredentials: async (creds: { cookie: string; token?: string; bxUa?: string; bxUmidtoken?: string; userAgent?: string }) => {
+    if (isElectron) return (window as any).freeseek.saveQwenManualCredentials(creds);
+    return apiPost("/api/qwen/saveManual", creds);
+  },
+
   // 代理
   getProxy: async () => {
     if (isElectron) return (window as any).freeseek.getProxy();
@@ -141,6 +163,10 @@ export const bridge = {
   },
   onClaudeStatus: (callback: (msg: string) => void) => {
     if (isElectron) return (window as any).freeseek.onClaudeStatus(callback);
+    return () => {};
+  },
+  onQwenStatus: (callback: (msg: string) => void) => {
+    if (isElectron) return (window as any).freeseek.onQwenStatus(callback);
     return () => {};
   },
 

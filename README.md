@@ -268,6 +268,66 @@ taskkill /PID <PID> /F
 
 已修复。Claude API 只接受特定 locale 值（`en-US`、`de-DE` 等），代码中已硬编码为 `en-US`。
 
+**Q: `npm install` 时 Electron 下载很慢或失败，提示 `Electron failed to install correctly`？**
+
+Electron 安装时需要从 GitHub 下载约 100MB 的二进制文件，国内网络经常超时或下载不完整。解决方法：
+
+方法一：设置 Electron 镜像源（推荐）
+
+```bash
+# 设置淘宝 Electron 镜像
+npm config set electron_mirror https://npmmirror.com/mirrors/electron/
+
+# 然后重新安装
+rm -rf node_modules
+npm install
+```
+
+Windows CMD 下同样适用，或者用环境变量：
+
+```cmd
+set ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/
+rmdir /s /q node_modules
+npm install
+```
+
+PowerShell：
+
+```powershell
+$env:ELECTRON_MIRROR="https://npmmirror.com/mirrors/electron/"
+Remove-Item -Recurse -Force node_modules
+npm install
+```
+
+方法二：在 `.npmrc` 文件中配置（一劳永逸）
+
+在项目根目录或用户目录（`~/.npmrc`）创建 `.npmrc` 文件：
+
+```ini
+electron_mirror=https://npmmirror.com/mirrors/electron/
+```
+
+方法三：使用代理
+
+如果你有代理，可以让 npm 走代理下载：
+
+```bash
+npm config set proxy http://127.0.0.1:7890
+npm config set https-proxy http://127.0.0.1:7890
+npm install
+```
+
+方法四：手动下载 Electron 二进制
+
+1. 从 [npmmirror Electron 镜像](https://registry.npmmirror.com/binary.html?path=electron/) 下载对应版本的 zip 文件（如 `electron-v33.4.11-win32-x64.zip`）
+2. 放到 Electron 缓存目录：
+   - Windows: `%LOCALAPPDATA%\electron\Cache\`
+   - macOS: `~/Library/Caches/electron/`
+   - Linux: `~/.cache/electron/`
+3. 重新运行 `npm install`
+
+> 💡 如果已经报错 `Electron failed to install correctly`，一定要先删除 `node_modules` 再重新安装，否则 npm 会跳过 Electron 的 postinstall 脚本。
+
 ## 致谢
 
 本项目基于 [openclaw-zero-token](https://github.com/linuxhsj/openclaw-zero-token/tree/main) 的底层实现，感谢原作者的贡献。

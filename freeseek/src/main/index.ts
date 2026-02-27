@@ -1,17 +1,8 @@
 import { app, BrowserWindow, ipcMain, Tray, Menu, nativeImage } from "electron";
 import path from "node:path";
 import fs from "node:fs";
-import {
-  captureCredentials,
-  loadCredentials,
-  clearCredentials,
-} from "./auth";
-import {
-  captureClaudeCredentials,
-  loadClaudeCredentials,
-  clearClaudeCredentials,
-} from "./claude-auth";
-import { startServer, getStats, resetClaudeClient, type ServerLog } from "./server";
+import { startServer, getStats, type ServerLog } from "./server";
+import { registry } from "./providers";
 
 let mainWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
@@ -21,7 +12,6 @@ let serverRunning = false;
 let serverStartedAt: number | null = null;
 
 function createTray() {
-  // 创建一个简单的 16x16 托盘图标
   const icon = nativeImage.createFromDataURL(
     "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAARklEQVQ4T2NkYPj/n4EBCxg1gIEBl2YGBgYGRkYGBgYmJiYGBgYGBmZmZgYGBgYGFhYWBgYGBgZWVlYGBgYGBjY2NgYAAABfCA0RVgoyAAAAAElFTkSuQmCC"
   );
@@ -52,11 +42,9 @@ function createWindow() {
     },
   });
 
-  // 加载 renderer HTML
   const htmlPath = path.join(__dirname, "..", "renderer", "index.html");
   mainWindow.loadFile(htmlPath);
 
-  // 关闭窗口时最小化到托盘而不是退出
   mainWindow.on("close", (e) => {
     if (!isQuitting) {
       e.preventDefault();
@@ -69,7 +57,6 @@ function createWindow() {
   });
 }
 
-// 标记是否真正退出
 let isQuitting = false;
 app.on("before-quit", () => { isQuitting = true; });
 
@@ -104,7 +91,8 @@ ipcMain.handle("server:stop", async () => {
 });
 
 ipcMain.handle("server:status", async () => {
-  const creds = loadCredentials();
+  const deepseek = registry.get("deepseek");
+  const creds = deepseek?.loadCredentials();
   return {
     running: serverRunning,
     port: serverPort,
@@ -118,10 +106,17 @@ ipcMain.handle("server:stats", async () => {
   return getStats();
 });
 
-// 凭证管理
+ipcMain.handle("server:resetSessions", async () => {
+  registry.resetAll();
+  return { ok: true };
+});
+
+// --- DeepSeek 凭证（通过 registry） ---
 ipcMain.handle("auth:start", async () => {
   try {
-    const creds = await captureCredentials((msg) => {
+    const provider = registry.get("deepseek");
+    if (!provider) return { ok: false, error: "DeepSeek provider not found" };
+    const creds = await provider.captureCredentials((msg) => {
       mainWindow?.webContents.send("auth:status", msg);
     });
     return { ok: true, capturedAt: creds.capturedAt };
@@ -131,77 +126,27 @@ ipcMain.handle("auth:start", async () => {
 });
 
 ipcMain.handle("auth:get", async () => {
-  const creds = loadCredentials();
-  if (!creds) return null;
-  return {
-    hasCookie: !!creds.cookie,
-    cookieCount: creds.cookie.split(";").length,
-    hasBearer: !!creds.bearer,
-    bearerLength: creds.bearer.length,
-    capturedAt: creds.capturedAt,
-    hasSessionId:
-      creds.cookie.includes("ds_session_id=") ||
-      creds.cookie.includes("d_id="),
-  };
+  const provider = registry.get("deepseek");
+  return provider?.getCredentialsSummary() || null;
 });
 
 ipcMain.handle("auth:clear", async () => {
-  return { ok: clearCredentials() };
+  const provider = registry.get("deepseek");
+  return { ok: provider?.clearCredentials() ?? false };
 });
 
-// 凭证过期检测（解析 JWT exp）
 ipcMain.handle("auth:checkExpiry", async () => {
-  const creds = loadCredentials();
-  if (!creds?.bearer) return { valid: false, reason: "no_credentials" };
-  try {
-    const parts = creds.bearer.split(".");
-    if (parts.length !== 3) return { valid: true, expiresAt: null };
-    const payload = JSON.parse(Buffer.from(parts[1], "base64url").toString());
-    if (payload.exp) {
-      const expiresAt = payload.exp * 1000;
-      const now = Date.now();
-      const remaining = expiresAt - now;
-      return {
-        valid: remaining > 0,
-        expiresAt: new Date(expiresAt).toISOString(),
-        remainingMs: remaining,
-        expired: remaining <= 0,
-        expiringSoon: remaining > 0 && remaining < 30 * 60 * 1000, // 30 分钟内过期
-      };
-    }
-    return { valid: true, expiresAt: null };
-  } catch {
-    return { valid: true, expiresAt: null };
-  }
-});
-
-// 重置会话缓存（当会话失效时调用）
-ipcMain.handle("server:resetSessions", async () => {
-  const { resetSessions } = await import("./server");
-  resetSessions();
-  return { ok: true };
+  const provider = registry.get("deepseek");
+  if (!provider?.checkExpiry) return { valid: false, reason: "no_credentials" };
+  return provider.checkExpiry();
 });
 
 ipcMain.handle(
   "auth:saveManual",
-  async (
-    _event,
-    data: { cookie: string; bearer: string; userAgent: string },
-  ) => {
+  async (_event, data: { cookie: string; bearer: string; userAgent: string }) => {
     try {
-      const authDir = path.join(__dirname, "..", "..", "data");
-      fs.mkdirSync(authDir, { recursive: true });
-      const creds = {
-        ...data,
-        userAgent:
-          data.userAgent ||
-          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-        capturedAt: new Date().toISOString(),
-      };
-      fs.writeFileSync(
-        path.join(authDir, "auth.json"),
-        JSON.stringify(creds, null, 2),
-      );
+      const provider = registry.get("deepseek");
+      provider?.saveManualCredentials(data);
       return { ok: true };
     } catch (err: any) {
       return { ok: false, error: err.message };
@@ -209,14 +154,14 @@ ipcMain.handle(
   },
 );
 
-// ========== Claude IPC Handlers ==========
-
+// --- Claude 凭证（通过 registry） ---
 ipcMain.handle("claude:start", async () => {
   try {
-    const creds = await captureClaudeCredentials((msg) => {
+    const provider = registry.get("claude");
+    if (!provider) return { ok: false, error: "Claude provider not found" };
+    const creds = await provider.captureCredentials((msg) => {
       mainWindow?.webContents.send("claude:status", msg);
     });
-    resetClaudeClient();
     return { ok: true, capturedAt: creds.capturedAt };
   } catch (err: any) {
     return { ok: false, error: err.message };
@@ -224,20 +169,13 @@ ipcMain.handle("claude:start", async () => {
 });
 
 ipcMain.handle("claude:get", async () => {
-  const creds = loadClaudeCredentials();
-  if (!creds) return null;
-  return {
-    hasSessionKey: !!creds.sessionKey,
-    sessionKeyPrefix: creds.sessionKey?.slice(0, 20) + "...",
-    hasCookie: !!creds.cookie,
-    hasOrganizationId: !!creds.organizationId,
-    capturedAt: creds.capturedAt,
-  };
+  const provider = registry.get("claude");
+  return provider?.getCredentialsSummary() || null;
 });
 
 ipcMain.handle("claude:clear", async () => {
-  resetClaudeClient();
-  return { ok: clearClaudeCredentials() };
+  const provider = registry.get("claude");
+  return { ok: provider?.clearCredentials() ?? false };
 });
 
 ipcMain.handle("claude:saveManual", async (
@@ -245,19 +183,51 @@ ipcMain.handle("claude:saveManual", async (
   data: { sessionKey: string; cookie?: string; userAgent?: string },
 ) => {
   try {
-    const authDir = path.join(__dirname, "..", "..", "data");
-    fs.mkdirSync(authDir, { recursive: true });
-    const creds = {
-      sessionKey: data.sessionKey.trim(),
-      cookie: data.cookie?.trim() || `sessionKey=${data.sessionKey.trim()}`,
-      userAgent: data.userAgent?.trim() || "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-      capturedAt: new Date().toISOString(),
-    };
-    fs.writeFileSync(
-      path.join(authDir, "claude-auth.json"),
-      JSON.stringify(creds, null, 2),
-    );
-    resetClaudeClient();
+    const provider = registry.get("claude");
+    provider?.saveManualCredentials(data);
+    return { ok: true };
+  } catch (err: any) {
+    return { ok: false, error: err.message };
+  }
+});
+
+// --- 通义千问凭证（通过 registry） ---
+ipcMain.handle("qwen:start", async () => {
+  try {
+    const provider = registry.get("qwen");
+    if (!provider) return { ok: false, error: "Qwen provider not found" };
+    const creds = await provider.captureCredentials((msg) => {
+      mainWindow?.webContents.send("qwen:status", msg);
+    });
+    return { ok: true, capturedAt: creds.capturedAt };
+  } catch (err: any) {
+    return { ok: false, error: err.message };
+  }
+});
+
+ipcMain.handle("qwen:get", async () => {
+  const provider = registry.get("qwen");
+  return provider?.getCredentialsSummary() || null;
+});
+
+ipcMain.handle("qwen:clear", async () => {
+  const provider = registry.get("qwen");
+  return { ok: provider?.clearCredentials() ?? false };
+});
+
+ipcMain.handle("qwen:checkExpiry", async () => {
+  const provider = registry.get("qwen");
+  if (!provider?.checkExpiry) return { valid: false, reason: "no_credentials" };
+  return provider.checkExpiry();
+});
+
+ipcMain.handle("qwen:saveManual", async (
+  _event,
+  data: { cookie: string; token?: string; bxUa?: string; bxUmidtoken?: string; userAgent?: string },
+) => {
+  try {
+    const provider = registry.get("qwen");
+    provider?.saveManualCredentials(data);
     return { ok: true };
   } catch (err: any) {
     return { ok: false, error: err.message };
@@ -293,7 +263,6 @@ ipcMain.handle("proxy:save", async (_event, proxy: string) => {
 // ========== App Lifecycle ==========
 
 app.whenReady().then(() => {
-  // 设置中文应用菜单
   const menuTemplate: Electron.MenuItemConstructorOptions[] = [
     {
       label: "文件",
@@ -346,9 +315,9 @@ app.whenReady().then(() => {
   createTray();
   createWindow();
 
-  // 自动启动服务（如果有凭证）
-  const creds = loadCredentials();
-  if (creds) {
+  // 自动启动服务（如果有任何凭证）
+  const hasAnyCreds = registry.all().some((p) => p.loadCredentials());
+  if (hasAnyCreds) {
     serverInstance = startServer(serverPort, sendLog);
     serverRunning = true;
     serverStartedAt = Date.now();

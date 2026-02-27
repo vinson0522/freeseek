@@ -24,9 +24,11 @@ const chatBox = ref<HTMLElement | null>(null);
 const inputRef = ref<HTMLTextAreaElement | null>(null);
 const showSystemPrompt = ref(false);
 
-const isReasonerModel = computed(() => model.value.includes("reasoner"));
+const isReasonerModel = computed(() => model.value.includes("reasoner") || model.value.startsWith("qwq") || model.value.startsWith("qwen3.5") || model.value === "qwen-max");
 const isClaudeModel = computed(() => model.value.startsWith("claude-"));
-const providerName = computed(() => isClaudeModel.value ? "Claude" : "DeepSeek");
+const isQwenModel = computed(() => model.value.startsWith("qwen") || model.value.startsWith("qwq"));
+const providerName = computed(() => isClaudeModel.value ? "Claude" : isQwenModel.value ? "通义千问" : "DeepSeek");
+const providerAvatar = computed(() => isClaudeModel.value ? "CL" : isQwenModel.value ? "QW" : "DS");
 const hasMessages = computed(() => messages.value.length > 0);
 
 function scrollBottom() {
@@ -146,6 +148,13 @@ function autoResize(e: Event) {
               <option value="claude-haiku-4-6">Claude Haiku 4</option>
               <option value="claude-3-5-sonnet">Claude 3.5 Sonnet</option>
             </optgroup>
+            <optgroup label="通义千问">
+              <option value="qwen3.5-plus">Qwen 3.5 Plus</option>
+              <option value="qwen-max">Qwen Max</option>
+              <option value="qwen-plus">Qwen Plus</option>
+              <option value="qwen-turbo">Qwen Turbo</option>
+              <option value="qwq-plus">QwQ Plus</option>
+            </optgroup>
           </select>
         </div>
         <div class="toolbar-item">
@@ -176,7 +185,7 @@ function autoResize(e: Event) {
       <div class="empty-state" v-if="!hasMessages">
         <div class="empty-icon">💬</div>
         <div class="empty-title">开始新对话</div>
-        <div class="empty-desc">选择模型，输入消息开始与 DeepSeek / Claude 对话</div>
+        <div class="empty-desc">选择模型，输入消息开始与 DeepSeek / Claude / 通义千问 对话</div>
         <div class="empty-hints">
           <div class="hint-chip" @click="input = '用简单的语言解释量子计算'">💡 用简单的语言解释量子计算</div>
           <div class="hint-chip" @click="input = '帮我写一个 Python 快速排序'">🧑‍💻 帮我写一个 Python 快速排序</div>
@@ -199,7 +208,7 @@ function autoResize(e: Event) {
 
         <!-- Assistant -->
         <div class="msg-row msg-assistant" v-else>
-          <div class="msg-avatar avatar-ai">{{ isClaudeModel ? 'CL' : 'DS' }}</div>
+          <div class="msg-avatar avatar-ai">{{ providerAvatar }}</div>
           <div class="msg-content">
             <div class="msg-meta-left">
               <span class="msg-sender">{{ providerName }}</span>
@@ -261,7 +270,7 @@ function autoResize(e: Event) {
         </button>
       </div>
       <div class="input-hint">
-        <span>{{ model }}{{ stream ? ' · 流式' : '' }}{{ isReasonerModel ? ' · 深度思考' : '' }}{{ isClaudeModel ? ' · Claude' : '' }}</span>
+        <span>{{ model }}{{ stream ? ' · 流式' : '' }}{{ isReasonerModel ? ' · 深度思考' : '' }}{{ isClaudeModel ? ' · Claude' : isQwenModel ? ' · 通义千问' : '' }}</span>
         <span v-if="sending" style="color:var(--primary)">● 正在响应...</span>
       </div>
     </div>

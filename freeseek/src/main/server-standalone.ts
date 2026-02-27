@@ -6,15 +6,8 @@
 import express from "express";
 import path from "node:path";
 import fs from "node:fs";
-import { createApp, getStats, resetSessions, startServer, type ServerLog } from "./server";
-import { loadCredentials, clearCredentials } from "./auth";
-import {
-  loadClaudeCredentials,
-  clearClaudeCredentials,
-  captureClaudeCredentials,
-} from "./claude-auth";
-import { captureCredentials } from "./auth";
-import { resetClaudeClient } from "./server";
+import { getStats, resetSessions, startServer, type ServerLog } from "./server";
+import { registry } from "./providers";
 
 const args = process.argv.slice(2);
 function getArg(name: string, def: string): string {
@@ -60,7 +53,8 @@ if (fs.existsSync(rendererDir)) {
 
 // --- 服务状态 ---
 admin.get("/api/server/status", (_req, res) => {
-  const creds = loadCredentials();
+  const deepseek = registry.get("deepseek");
+  const creds = deepseek?.loadCredentials();
   res.json({
     running: true,
     port: API_PORT,
@@ -79,58 +73,40 @@ admin.post("/api/server/resetSessions", (_req, res) => {
   res.json({ ok: true });
 });
 
-// --- DeepSeek 凭证 ---
+// --- 通用 Provider API ---
+// 获取所有 Provider 状态
+admin.get("/api/providers", (_req, res) => {
+  const providers = registry.all().map((p) => ({
+    id: p.id,
+    name: p.name,
+    hasCredentials: !!p.loadCredentials(),
+    models: p.getModels(),
+  }));
+  res.json(providers);
+});
+
+// --- DeepSeek 凭证（保持向后兼容） ---
 admin.get("/api/auth/get", (_req, res) => {
-  const creds = loadCredentials();
-  if (!creds) return res.json(null);
-  res.json({
-    hasCookie: !!creds.cookie,
-    cookieCount: creds.cookie.split(";").length,
-    hasBearer: !!creds.bearer,
-    bearerLength: creds.bearer.length,
-    capturedAt: creds.capturedAt,
-    hasSessionId: creds.cookie.includes("ds_session_id=") || creds.cookie.includes("d_id="),
-  });
+  const provider = registry.get("deepseek");
+  const summary = provider?.getCredentialsSummary();
+  res.json(summary || null);
 });
 
 admin.post("/api/auth/clear", (_req, res) => {
-  res.json({ ok: clearCredentials() });
+  const provider = registry.get("deepseek");
+  res.json({ ok: provider?.clearCredentials() ?? false });
 });
 
 admin.post("/api/auth/checkExpiry", (_req, res) => {
-  const creds = loadCredentials();
-  if (!creds?.bearer) return res.json({ valid: false, reason: "no_credentials" });
-  try {
-    const parts = creds.bearer.split(".");
-    if (parts.length !== 3) return res.json({ valid: true, expiresAt: null });
-    const payload = JSON.parse(Buffer.from(parts[1], "base64url").toString());
-    if (payload.exp) {
-      const expiresAt = payload.exp * 1000;
-      const remaining = expiresAt - Date.now();
-      return res.json({
-        valid: remaining > 0,
-        expiresAt: new Date(expiresAt).toISOString(),
-        remainingMs: remaining,
-        expired: remaining <= 0,
-        expiringSoon: remaining > 0 && remaining < 30 * 60 * 1000,
-      });
-    }
-    res.json({ valid: true, expiresAt: null });
-  } catch {
-    res.json({ valid: true, expiresAt: null });
-  }
+  const provider = registry.get("deepseek");
+  if (!provider?.checkExpiry) return res.json({ valid: false, reason: "no_credentials" });
+  res.json(provider.checkExpiry());
 });
 
 admin.post("/api/auth/saveManual", (req, res) => {
   try {
-    const { cookie, bearer, userAgent } = req.body;
-    fs.mkdirSync(DATA_DIR, { recursive: true });
-    const creds = {
-      cookie, bearer,
-      userAgent: userAgent || "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-      capturedAt: new Date().toISOString(),
-    };
-    fs.writeFileSync(path.join(DATA_DIR, "auth.json"), JSON.stringify(creds, null, 2));
+    const provider = registry.get("deepseek");
+    provider?.saveManualCredentials(req.body);
     res.json({ ok: true });
   } catch (err: any) {
     res.json({ ok: false, error: err.message });
@@ -139,7 +115,9 @@ admin.post("/api/auth/saveManual", (req, res) => {
 
 admin.post("/api/auth/start", async (_req, res) => {
   try {
-    const creds = await captureCredentials((msg) => {
+    const provider = registry.get("deepseek");
+    if (!provider) return res.json({ ok: false, error: "DeepSeek provider not found" });
+    const creds = await provider.captureCredentials((msg) => {
       console.log(`[Auth] ${msg}`);
     });
     res.json({ ok: true, capturedAt: creds.capturedAt });
@@ -148,36 +126,22 @@ admin.post("/api/auth/start", async (_req, res) => {
   }
 });
 
-// --- Claude 凭证 ---
+// --- Claude 凭证（保持向后兼容） ---
 admin.get("/api/claude/get", (_req, res) => {
-  const creds = loadClaudeCredentials();
-  if (!creds) return res.json(null);
-  res.json({
-    hasSessionKey: !!creds.sessionKey,
-    sessionKeyPrefix: creds.sessionKey?.slice(0, 20) + "...",
-    hasCookie: !!creds.cookie,
-    hasOrganizationId: !!creds.organizationId,
-    capturedAt: creds.capturedAt,
-  });
+  const provider = registry.get("claude");
+  const summary = provider?.getCredentialsSummary();
+  res.json(summary || null);
 });
 
 admin.post("/api/claude/clear", (_req, res) => {
-  resetClaudeClient();
-  res.json({ ok: clearClaudeCredentials() });
+  const provider = registry.get("claude");
+  res.json({ ok: provider?.clearCredentials() ?? false });
 });
 
 admin.post("/api/claude/saveManual", (req, res) => {
   try {
-    const { sessionKey, cookie, userAgent } = req.body;
-    fs.mkdirSync(DATA_DIR, { recursive: true });
-    const creds = {
-      sessionKey: sessionKey.trim(),
-      cookie: cookie?.trim() || `sessionKey=${sessionKey.trim()}`,
-      userAgent: userAgent?.trim() || "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-      capturedAt: new Date().toISOString(),
-    };
-    fs.writeFileSync(path.join(DATA_DIR, "claude-auth.json"), JSON.stringify(creds, null, 2));
-    resetClaudeClient();
+    const provider = registry.get("claude");
+    provider?.saveManualCredentials(req.body);
     res.json({ ok: true });
   } catch (err: any) {
     res.json({ ok: false, error: err.message });
@@ -186,10 +150,52 @@ admin.post("/api/claude/saveManual", (req, res) => {
 
 admin.post("/api/claude/start", async (_req, res) => {
   try {
-    const creds = await captureClaudeCredentials((msg) => {
+    const provider = registry.get("claude");
+    if (!provider) return res.json({ ok: false, error: "Claude provider not found" });
+    const creds = await provider.captureCredentials((msg) => {
       console.log(`[Claude Auth] ${msg}`);
     });
-    resetClaudeClient();
+    res.json({ ok: true, capturedAt: creds.capturedAt });
+  } catch (err: any) {
+    res.json({ ok: false, error: err.message });
+  }
+});
+
+// --- 通义千问凭证 ---
+admin.get("/api/qwen/get", (_req, res) => {
+  const provider = registry.get("qwen");
+  const summary = provider?.getCredentialsSummary();
+  res.json(summary || null);
+});
+
+admin.post("/api/qwen/clear", (_req, res) => {
+  const provider = registry.get("qwen");
+  res.json({ ok: provider?.clearCredentials() ?? false });
+});
+
+admin.post("/api/qwen/checkExpiry", (_req, res) => {
+  const provider = registry.get("qwen");
+  if (!provider?.checkExpiry) return res.json({ valid: false, reason: "no_credentials" });
+  res.json(provider.checkExpiry());
+});
+
+admin.post("/api/qwen/saveManual", (req, res) => {
+  try {
+    const provider = registry.get("qwen");
+    provider?.saveManualCredentials(req.body);
+    res.json({ ok: true });
+  } catch (err: any) {
+    res.json({ ok: false, error: err.message });
+  }
+});
+
+admin.post("/api/qwen/start", async (_req, res) => {
+  try {
+    const provider = registry.get("qwen");
+    if (!provider) return res.json({ ok: false, error: "Qwen provider not found" });
+    const creds = await provider.captureCredentials((msg) => {
+      console.log(`[Qwen Auth] ${msg}`);
+    });
     res.json({ ok: true, capturedAt: creds.capturedAt });
   } catch (err: any) {
     res.json({ ok: false, error: err.message });

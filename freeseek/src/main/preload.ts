@@ -29,6 +29,19 @@ contextBridge.exposeInMainWorld("freeseek", {
     userAgent?: string;
   }) => ipcRenderer.invoke("claude:saveManual", creds),
 
+  // 通义千问凭证管理
+  startQwenAuth: () => ipcRenderer.invoke("qwen:start"),
+  getQwenCredentials: () => ipcRenderer.invoke("qwen:get"),
+  clearQwenCredentials: () => ipcRenderer.invoke("qwen:clear"),
+  checkQwenExpiry: () => ipcRenderer.invoke("qwen:checkExpiry"),
+  saveQwenManualCredentials: (creds: {
+    cookie: string;
+    token?: string;
+    bxUa?: string;
+    bxUmidtoken?: string;
+    userAgent?: string;
+  }) => ipcRenderer.invoke("qwen:saveManual", creds),
+
   // 日志监听
   onLog: (callback: (log: any) => void) => {
     const handler = (_event: any, log: any) => callback(log);
@@ -48,6 +61,13 @@ contextBridge.exposeInMainWorld("freeseek", {
     const handler = (_event: any, msg: string) => callback(msg);
     ipcRenderer.on("claude:status", handler);
     return () => ipcRenderer.removeListener("claude:status", handler);
+  },
+
+  // 通义千问凭证捕获状态
+  onQwenStatus: (callback: (msg: string) => void) => {
+    const handler = (_event: any, msg: string) => callback(msg);
+    ipcRenderer.on("qwen:status", handler);
+    return () => ipcRenderer.removeListener("qwen:status", handler);
   },
 
   // 代理配置

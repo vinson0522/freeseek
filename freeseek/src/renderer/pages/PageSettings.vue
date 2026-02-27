@@ -69,7 +69,7 @@ async function saveProxy() {
       <div class="ant-card-body" style="padding:0">
         <table class="ant-table">
           <tr><th>快捷键</th><th>功能</th></tr>
-          <tr><td><span class="ant-code">Ctrl+1</span> ~ <span class="ant-code">Ctrl+7</span></td><td>切换页面</td></tr>
+          <tr><td><span class="ant-code">Ctrl+1</span> ~ <span class="ant-code">Ctrl+8</span></td><td>切换页面</td></tr>
           <tr><td><span class="ant-code">Ctrl+Enter</span></td><td>API 调试页发送请求</td></tr>
           <tr><td><span class="ant-code">Escape</span></td><td>中止 API 调试请求</td></tr>
           <tr><td><span class="ant-code">Enter</span></td><td>聊天测试发送消息</td></tr>

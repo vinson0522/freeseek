@@ -22,6 +22,17 @@ const claudeSessionKey = ref("");
 const claudeCookie = ref("");
 const claudeUA = ref("");
 
+// Qwen
+const qwenStatus = ref("");
+const qwenStatusType = ref<"info" | "success" | "error">("info");
+const qwenBusy = ref(false);
+const showQwenManual = ref(false);
+const qwenCookie = ref("");
+const qwenToken = ref("");
+const qwenBxUa = ref("");
+const qwenBxUmidtoken = ref("");
+const qwenUA = ref("");
+
 async function startAutoAuth() {
   authBusy.value = true;
   authStatus.value = "正在启动浏览器...";
@@ -106,6 +117,53 @@ async function saveClaudeManual() {
 async function clearClaudeCreds() {
   if (!confirm("确定清除 Claude 凭证？")) return;
   await bridge.clearClaudeCredentials();
+  store.showToast("已清除", "info");
+  store.refreshStatus();
+}
+
+// Qwen 操作
+async function startQwenAuth() {
+  qwenBusy.value = true;
+  qwenStatus.value = "正在启动浏览器...";
+  qwenStatusType.value = "info";
+  const cleanup = bridge.onQwenStatus((msg) => {
+    qwenStatus.value = msg;
+    qwenStatusType.value = msg.startsWith("✅") ? "success" : msg.startsWith("❌") ? "error" : "info";
+  });
+  const r = await bridge.startQwenAuth();
+  if (r.ok) {
+    qwenStatus.value = "✅ 通义千问凭证捕获成功";
+    qwenStatusType.value = "success";
+    store.showToast("通义千问凭证捕获成功", "ok");
+  } else {
+    qwenStatus.value = "❌ " + r.error;
+    qwenStatusType.value = "error";
+    store.showToast("捕获失败", "err");
+  }
+  qwenBusy.value = false;
+  cleanup();
+  store.refreshStatus();
+}
+
+async function saveQwenManual() {
+  if (!qwenCookie.value.trim()) {
+    store.showToast("请填写 Cookie", "err");
+    return;
+  }
+  const r = await bridge.saveQwenManualCredentials({
+    cookie: qwenCookie.value.trim(),
+    token: qwenToken.value.trim() || undefined,
+    bxUa: qwenBxUa.value.trim() || undefined,
+    bxUmidtoken: qwenBxUmidtoken.value.trim() || undefined,
+    userAgent: qwenUA.value.trim() || undefined,
+  });
+  r.ok ? store.showToast("通义千问凭证已保存", "ok") : store.showToast("保存失败", "err");
+  store.refreshStatus();
+}
+
+async function clearQwenCreds() {
+  if (!confirm("确定清除通义千问凭证？")) return;
+  await bridge.clearQwenCredentials();
   store.showToast("已清除", "info");
   store.refreshStatus();
 }
@@ -201,6 +259,58 @@ async function clearClaudeCreds() {
       </div>
     </div>
 
+    <!-- 通义千问凭证 -->
+    <div class="ant-card">
+      <div class="ant-card-head">
+        <div class="ant-card-title">
+          <span class="ant-badge-dot" :class="store.hasQwenCredentials ? 'success' : 'error'" />
+          通义千问凭证
+        </div>
+      </div>
+      <div class="ant-card-body">
+        <p style="margin-bottom:16px">通过浏览器自动化捕获通义千问网页版登录凭证。点击按钮会打开 Chrome，请在浏览器中完成登录，<strong>登录后请发送一条消息</strong>以捕获风控签名。</p>
+        <div class="btn-group" style="margin-top:0">
+          <button class="ant-btn ant-btn-primary" :disabled="qwenBusy" @click="startQwenAuth">
+            {{ qwenBusy ? '捕获中...' : '启动自动捕获' }}
+          </button>
+          <button class="ant-btn" @click="showQwenManual = !showQwenManual">手动粘贴凭证</button>
+          <button class="ant-btn ant-btn-danger" v-if="store.hasQwenCredentials" @click="clearQwenCreds">清除</button>
+        </div>
+        <div v-if="qwenStatus" :class="['auth-alert', qwenStatusType]" style="margin-top:16px">
+          <span class="ant-badge-dot" :class="qwenStatusType === 'success' ? 'success' : qwenStatusType === 'error' ? 'error' : 'processing'" />
+          {{ qwenStatus }}
+        </div>
+
+        <!-- 千问手动凭证 -->
+        <div v-if="showQwenManual" class="manual-section">
+          <p style="margin-bottom:12px;color:var(--text-tertiary);font-size:var(--font-size-sm)">
+            打开 <span class="ant-code">chat.qwen.ai</span>，按 F12 打开开发者工具，在 Network 面板中找到 <span class="ant-code">completions</span> 请求（发一条消息触发），复制 Cookie 和 bx-ua、bx-umidtoken 请求头。
+          </p>
+          <div class="ant-form-item">
+            <label class="ant-form-label">Cookie <span style="color:var(--error)">*</span></label>
+            <textarea class="ant-textarea" v-model="qwenCookie" rows="2" placeholder="粘贴完整 Cookie 字符串"></textarea>
+          </div>
+          <div class="ant-form-item">
+            <label class="ant-form-label">Token（可选，留空自动从 Cookie 提取）</label>
+            <textarea class="ant-textarea" v-model="qwenToken" rows="2" placeholder="粘贴 token 值"></textarea>
+          </div>
+          <div class="ant-form-item">
+            <label class="ant-form-label">bx-ua <span style="color:var(--error)">*</span>（风控签名，缺少会导致 Bad_Request）</label>
+            <textarea class="ant-textarea" v-model="qwenBxUa" rows="2" placeholder="请求头中的 bx-ua 值（很长的一串）"></textarea>
+          </div>
+          <div class="ant-form-item">
+            <label class="ant-form-label">bx-umidtoken（设备指纹）</label>
+            <input class="ant-input" v-model="qwenBxUmidtoken" placeholder="请求头中的 bx-umidtoken 值" />
+          </div>
+          <div class="ant-form-item">
+            <label class="ant-form-label">User-Agent（可选）</label>
+            <input class="ant-input" v-model="qwenUA" placeholder="留空使用默认值" />
+          </div>
+          <button class="ant-btn ant-btn-primary" @click="saveQwenManual">保存凭证</button>
+        </div>
+      </div>
+    </div>
+
     <!-- 凭证状态总览 -->
     <div class="ant-card">
       <div class="ant-card-head"><div class="ant-card-title">凭证状态</div></div>
@@ -241,6 +351,22 @@ async function clearClaudeCreds() {
             <td>捕获时间</td>
             <td>—</td>
             <td style="color:var(--text-tertiary)">{{ store.claudeCapturedAt ? new Date(store.claudeCapturedAt).toLocaleString('zh-CN') : '—' }}</td>
+          </tr>
+          <tr>
+            <td rowspan="3">通义千问</td>
+            <td>Token</td>
+            <td><span :class="['ant-badge-dot', store.hasQwenCredentials ? 'success' : 'error']" />{{ store.hasQwenCredentials ? '有效' : '未设置' }}</td>
+            <td style="color:var(--text-tertiary)">{{ store.hasQwenCredentials ? store.qwenTokenPrefix : '—' }}</td>
+          </tr>
+          <tr>
+            <td>bx-ua 风控</td>
+            <td><span :class="['ant-badge-dot', store.qwenHasBxUa ? 'success' : 'error']" />{{ store.qwenHasBxUa ? '已设置' : '缺失' }}</td>
+            <td style="color:var(--text-tertiary)">{{ store.qwenHasBxUa ? '已配置风控签名' : '⚠️ 缺少风控签名会导致 Bad_Request，请重新捕获并在浏览器中发一条消息' }}</td>
+          </tr>
+          <tr>
+            <td>捕获时间</td>
+            <td>—</td>
+            <td style="color:var(--text-tertiary)">{{ store.qwenCapturedAt ? new Date(store.qwenCapturedAt).toLocaleString('zh-CN') : '—' }}</td>
           </tr>
         </table>
       </div>
